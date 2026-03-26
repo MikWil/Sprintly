@@ -1,0 +1,34 @@
+## .NET build artifacts
+bin/
+obj/
+out/
+release/
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Rider / other IDEs
+.idea/
+*.swp
+
+## Cursor AI workspace data
+.cursor/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## NuGet
+*.nupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Test results
+TestResults/
+coverage/

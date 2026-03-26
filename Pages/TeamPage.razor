@@ -1,0 +1,223 @@
+@page "/team"
+@inject AppStateService AppState
+@implements IDisposable
+
+<PageTitle>Team — Sprintly</PageTitle>
+
+<div class="page-title">
+    <h1>Team</h1>
+    <button class="btn btn-primary btn-sm" @onclick="StartAdd">
+        <i class="bi bi-plus-lg me-1"></i>Add member
+    </button>
+</div>
+
+
+@* ── Add / Edit form ─────────────────────────────────────────────────── *@
+@if (showForm)
+{
+    <div class="form-section mb-4">
+        <h2 class="mb-3">@(editingId == null ? "New team member" : "Edit team member")</h2>
+        <EditForm Model="form" OnValidSubmit="SaveMember">
+            <DataAnnotationsValidator />
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <label class="form-label">Name <span class="text-danger">*</span></label>
+                    <InputText @bind-Value="form.Name" class="form-control" placeholder="e.g. Alice Chen" />
+                    <ValidationMessage For="() => form.Name" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label">Role <span class="text-danger">*</span></label>
+                    <InputSelect @bind-Value="form.Role" class="form-select">
+                        @foreach (var r in AppState.State.Settings.DefaultRoles)
+                        {
+                            <option value="@r">@r</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label">Hours / day</label>
+                    <InputNumber @bind-Value="form.HoursPerDay" class="form-control" min="1" max="24" step="0.5" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label">Capacity factor</label>
+                    <InputNumber @bind-Value="form.CapacityFactor" class="form-control" min="0.1" max="1" step="0.05" />
+                    <div class="form-text">0.1–1.0 (e.g. 0.8 = 80%)</div>
+                </div>
+                <div class="col-12 col-md-1 d-flex align-items-end">
+                    <div class="form-check pb-2">
+                        <InputCheckbox @bind-Value="form.IsActive" class="form-check-input" id="isActive" />
+                        <label class="form-check-label" for="isActive">Active</label>
+                    </div>
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(formError))
+            {
+                <div class="alert alert-danger mt-2 py-2">@formError</div>
+            }
+            <div class="d-flex gap-2 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-check-lg me-1"></i>Save
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelForm">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@* ── Member list ─────────────────────────────────────────────────────── *@
+@if (AppState.State.TeamMembers.Count == 0)
+{
+    <div class="empty-state">
+        <div class="empty-icon">👥</div>
+        <p>No team members yet. Add your first member to get started.</p>
+    </div>
+}
+else
+{
+    <div class="sp-card">
+        <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th class="text-center">Hours/day</th>
+                        <th class="text-center">Capacity</th>
+                        <th class="text-center">Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in AppState.State.TeamMembers)
+                    {
+                        <tr class="@(m.IsActive ? "" : "text-muted")">
+                            <td class="fw-medium align-middle">@m.Name</td>
+                            <td class="align-middle"><span class="role-badge">@m.Role</span></td>
+                            <td class="text-center align-middle">@m.HoursPerDay h</td>
+                            <td class="text-center align-middle">@((m.CapacityFactor * 100).ToString("F0"))%</td>
+                            <td class="text-center align-middle">
+                                @if (m.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary">Inactive</span>
+                                }
+                            </td>
+                            <td class="text-end align-middle">
+                                <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => StartEdit(m)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveMember(m.Id)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+    </div>
+}
+
+@code {
+    private bool showForm;
+    private string? editingId;
+    private string? formError;
+
+    private TeamMemberForm form = new();
+
+    protected override void OnInitialized() =>
+        AppState.OnChange += StateHasChanged;
+
+    private void StartAdd()
+    {
+        form = new TeamMemberForm
+        {
+            HoursPerDay = AppState.State.Settings.DefaultHoursPerDay,
+            CapacityFactor = AppState.State.Settings.DefaultCapacityFactor,
+            Role = AppState.State.Settings.DefaultRoles.FirstOrDefault() ?? "Developer"
+        };
+        editingId = null;
+        formError = null;
+        showForm = true;
+    }
+
+    private void StartEdit(TeamMember m)
+    {
+        form = new TeamMemberForm
+        {
+            Name = m.Name,
+            Role = m.Role,
+            HoursPerDay = m.HoursPerDay,
+            CapacityFactor = m.CapacityFactor,
+            IsActive = m.IsActive
+        };
+        editingId = m.Id;
+        formError = null;
+        showForm = true;
+    }
+
+    private async Task SaveMember()
+    {
+        formError = null;
+        if (string.IsNullOrWhiteSpace(form.Name))
+        {
+            formError = "Name is required.";
+            return;
+        }
+        if (form.HoursPerDay <= 0)
+        {
+            formError = "Hours per day must be > 0.";
+            return;
+        }
+        if (form.CapacityFactor is < 0.05 or > 1.0)
+        {
+            formError = "Capacity factor must be between 0.05 and 1.0.";
+            return;
+        }
+
+        if (editingId == null)
+        {
+            await AppState.AddTeamMemberAsync(new TeamMember
+            {
+                Name = form.Name.Trim(),
+                Role = form.Role,
+                HoursPerDay = form.HoursPerDay,
+                CapacityFactor = form.CapacityFactor,
+                IsActive = form.IsActive
+            });
+        }
+        else
+        {
+            await AppState.UpdateTeamMemberAsync(new TeamMember
+            {
+                Id = editingId,
+                Name = form.Name.Trim(),
+                Role = form.Role,
+                HoursPerDay = form.HoursPerDay,
+                CapacityFactor = form.CapacityFactor,
+                IsActive = form.IsActive
+            });
+        }
+
+        showForm = false;
+    }
+
+    private async Task RemoveMember(string id)
+    {
+        await AppState.RemoveTeamMemberAsync(id);
+    }
+
+    private void CancelForm() => showForm = false;
+
+    public void Dispose() => AppState.OnChange -= StateHasChanged;
+
+    private class TeamMemberForm
+    {
+        public string Name { get; set; } = "";
+        public string Role { get; set; } = "Developer";
+        public double HoursPerDay { get; set; } = 8;
+        public double CapacityFactor { get; set; } = 1.0;
+        public bool IsActive { get; set; } = true;
+    }
+}

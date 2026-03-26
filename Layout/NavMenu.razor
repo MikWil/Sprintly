@@ -1,0 +1,69 @@
+@inject AppStateService AppState
+@implements IDisposable
+
+<div class="sidebar-brand">
+    <a class="brand-link" href="">
+        <div class="brand-icon">
+            <svg width="16" height="16" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 4L11 21h9l-5 11 15-18h-9L21 4z" fill="white" fill-opacity=".96"/>
+            </svg>
+        </div>
+        <div class="brand-wordmark">
+            <span class="brand-name">Sprintly</span>
+            <span class="brand-sub">Capacity Planner</span>
+        </div>
+    </a>
+    <button class="sidebar-toggler" @onclick="ToggleNavMenu" title="Toggle menu">
+        <i class="bi bi-list"></i>
+    </button>
+</div>
+
+<div class="@NavMenuCssClass sidebar-body" @onclick="ToggleNavMenu">
+    <nav class="sidebar-nav">
+        <p class="nav-group-label">Planning</p>
+
+        <NavLink class="sidebar-link" href="" Match="NavLinkMatch.All">
+            <i class="bi bi-speedometer2"></i>
+            <span>Dashboard</span>
+        </NavLink>
+
+        <NavLink class="sidebar-link" href="team">
+            <i class="bi bi-people"></i>
+            <span>Team</span>
+        </NavLink>
+
+        <NavLink class="sidebar-link" href="sprint">
+            <i class="bi bi-calendar3"></i>
+            <span>Sprints</span>
+        </NavLink>
+
+        <NavLink class="sidebar-link" href="leave">
+            <i class="bi bi-calendar-x"></i>
+            <span>Leave</span>
+        </NavLink>
+    </nav>
+
+    <div class="sidebar-footer">
+        @{
+            var activeSprint = AppState.GetActiveSprint();
+        }
+        <div class="sidebar-status @(activeSprint != null ? "" : "sidebar-status--none")">
+            <span class="sidebar-status-dot"></span>
+            <span class="sidebar-status-label">
+                @(activeSprint?.Name ?? "No active sprint")
+            </span>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    protected override void OnInitialized() =>
+        AppState.OnChange += OnStateChanged;
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+    private void ToggleNavMenu() => collapseNavMenu = !collapseNavMenu;
+    public void Dispose() => AppState.OnChange -= OnStateChanged;
+}

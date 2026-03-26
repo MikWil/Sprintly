@@ -1,0 +1,28 @@
+@* KPI metric card with colored variant backgrounds.
+   Variants: blue (default), green, purple, amber *@
+
+<div class="kpi-card kpi-card--@Variant">
+    <div class="kpi-card__icon">
+        <i class="bi bi-@Icon"></i>
+    </div>
+    <div class="kpi-card__body">
+        <div class="kpi-card__label">@Label</div>
+        <div class="kpi-card__value">@Value</div>
+        @if (!string.IsNullOrEmpty(SubText))
+        {
+            <div class="kpi-card__sub">@SubText</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public string? SubText { get; set; }
+
+    /// <summary>Bootstrap Icon name without the "bi-" prefix, e.g. "clock"</summary>
+    [Parameter] public string Icon { get; set; } = "bar-chart-fill";
+
+    /// <summary>blue | green | purple | amber</summary>
+    [Parameter] public string Variant { get; set; } = "blue";
+}

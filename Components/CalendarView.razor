@@ -1,0 +1,311 @@
+@*
+  Sprint calendar with optional team presence layer.
+  - Simple mode  (Members = null): date grid with click-to-toggle red days.
+  - Presence mode (Members provided): same, plus per-day who is here / away.
+*@
+
+@using Sprintly.Services
+
+@if (Sprint == null) return;
+
+@{
+    var today  = DateOnly.FromDateTime(DateTime.Today);
+
+    // Expand to full ISO weeks (Mon–Sun)
+    var gridStart = Sprint.StartDate;
+    while (gridStart.DayOfWeek != DayOfWeek.Monday)
+        gridStart = gridStart.AddDays(-1);
+
+    var gridEnd = Sprint.EndDate;
+    while (gridEnd.DayOfWeek != DayOfWeek.Sunday)
+        gridEnd = gridEnd.AddDays(1);
+
+    var allDays = new List<DateOnly>();
+    for (var d = gridStart; d <= gridEnd; d = d.AddDays(1))
+        allDays.Add(d);
+
+    var months = allDays
+        .Select(x => new DateOnly(x.Year, x.Month, 1))
+        .Distinct()
+        .ToList();
+
+    var activeMembers  = Members?.Where(m => m.IsActive).ToList() ?? [];
+    var allLeaves      = Leaves?.ToList() ?? [];
+    bool hasPresence   = activeMembers.Count > 0;
+    var allSections    = Sprint.Sections;
+    bool hasSections   = allSections.Count > 0;
+}
+
+<div class="cal-shell">
+
+    @* ── Month + member legend ─────────────────────────────────── *@
+    <div class="cal-month-strip">
+        <div class="cal-month-name">
+            <i class="bi bi-calendar3"></i>
+            @(months.Count == 1
+                ? months[0].ToString("MMMM yyyy")
+                : string.Join(" – ", months.Select(m => m.ToString("MMM yyyy"))))
+        </div>
+
+        @if (hasPresence)
+        {
+            <div class="cal-member-legend">
+                @foreach (var m in activeMembers)
+                {
+                    <div class="cal-legend-member" title="@m.Name · @m.Role">
+                        <div class="cal-legend-avatar" style="background:@MemberColor(m.Id)">
+                            @Initials(m.Name)
+                        </div>
+                        <span>@m.Name.Split(' ')[0]</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @* ── Day-of-week column headers ────────────────────────────── *@
+    <div class="cal-grid">
+        @foreach (var (label, wknd) in new (string,bool)[]
+        {
+            ("Mon",false),("Tue",false),("Wed",false),
+            ("Thu",false),("Fri",false),
+            ("Sat",true),("Sun",true)
+        })
+        {
+            <div class="cal-col-hd @(wknd ? "wknd" : "")">@label</div>
+        }
+
+        @* ── Day cells ─────────────────────────────────────────── *@
+        @foreach (var day in allDays)
+        {
+            var inSprint  = day >= Sprint.StartDate && day <= Sprint.EndDate;
+            var isWeekend = day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            var isHoliday = Sprint.HolidayDates.Contains(day);
+            var isToday   = day == today;
+
+            // Member statuses for this day
+            var memberStatuses = hasPresence && inSprint && !isWeekend
+                ? activeMembers.Select(m => (
+                    member: m,
+                    absent:  IsAbsent(m.Id, day, allLeaves),
+                    partial: IsPartial(m.Id, day, allLeaves)
+                  )).ToList()
+                : [];
+
+            var absentCount = memberStatuses.Count(x => x.absent);
+
+            // Section for this day
+            var daySection = inSprint
+                ? allSections.FirstOrDefault(s => s.StartDate <= day && s.EndDate >= day)
+                : null;
+
+            // CSS class string
+            string cls = "cal-cell";
+            if (!inSprint)      cls += " outside";
+            else if (isHoliday) cls += " holiday";
+            else if (isWeekend) cls += " weekend";
+            else                cls += " working";
+            if (isToday)        cls += " is-today";
+
+            <div class="@cls"
+                 title="@CellTitle(day, isHoliday, isWeekend, inSprint, absentCount, daySection?.Label)"
+                 @onclick="() => ToggleHoliday(day, inSprint, isWeekend)"
+                 style="@(daySection != null ? $"--section-color:{daySection.Color};" : "")">
+
+                @* Date number + away badge *@
+                <div class="cal-cell-top">
+                    <span class="cal-date">@day.Day</span>
+
+                    @if (inSprint && isHoliday)
+                    {
+                        <span class="cal-holiday-tag">Off</span>
+                    }
+                    else if (absentCount > 0)
+                    {
+                        <span class="cal-away-pill">@absentCount away</span>
+                    }
+                </div>
+
+                @* Member presence avatars *@
+                @if (memberStatuses.Count > 0)
+                {
+                    <div class="cal-avatars">
+                        @foreach (var (m, absent, partial) in memberStatuses)
+                        {
+                            var statusCls = absent  ? "absent"
+                                          : partial ? "partial"
+                                          : "present";
+                            var tip = absent  ? $"{m.Name}: away"
+                                    : partial ? $"{m.Name}: partial"
+                                    : $"{m.Name}: here";
+                            <div class="cal-avatar @statusCls"
+                                 style="background:@MemberColor(m.Id)"
+                                 title="@tip">
+                                @Initials(m.Name)
+                            </div>
+                        }
+                    </div>
+                }
+                else if (hasPresence && inSprint && isWeekend)
+                {
+                    @* Weekend — show faded avatars to maintain visual rhythm *@
+                    <div class="cal-avatars">
+                        @foreach (var m in activeMembers)
+                        {
+                            <div class="cal-avatar"
+                                 style="background:@MemberColor(m.Id)"
+                                 title="@m.Name: weekend">
+                                @Initials(m.Name)
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Section colour strip at bottom of cell *@
+                @if (daySection != null && inSprint)
+                {
+                    <div class="cal-section-strip"></div>
+                }
+
+            </div>
+        }
+    </div>
+
+    @* ── Legend bar ────────────────────────────────────────────── *@
+    <div class="cal-legend-bar">
+        <div class="cal-legend-item">
+            <div class="cl-swatch working"></div>
+            Working day
+        </div>
+        <div class="cal-legend-item">
+            <div class="cl-swatch weekend"></div>
+            Weekend
+        </div>
+        <div class="cal-legend-item">
+            <div class="cl-swatch holiday"></div>
+            Red day
+        </div>
+        <div class="cal-legend-item">
+            <div class="cl-swatch today"></div>
+            Today
+        </div>
+        @if (hasPresence)
+        {
+            <div class="cal-legend-item" style="gap:.4rem;">
+                <div class="cal-avatar present" style="background:var(--brand); width:14px; height:14px; font-size:6px;">A</div>
+                Present
+            </div>
+            <div class="cal-legend-item" style="gap:.4rem;">
+                <div class="cal-avatar absent" style="background:var(--brand); width:14px; height:14px; font-size:6px;">A</div>
+                Away
+            </div>
+            <div class="cal-legend-item" style="gap:.4rem;">
+                <div class="cal-avatar partial" style="background:var(--brand); width:14px; height:14px; font-size:6px;">A</div>
+                Partial
+            </div>
+        }
+        @if (!Readonly)
+        {
+            <div class="cal-hint">Click working day to toggle red day</div>
+        }
+    </div>
+</div>
+
+@* ── Section legend ─────────────────────────────────────────── *@
+@if (hasSections)
+{
+    <div class="cal-section-legend">
+        @foreach (var sec in allSections)
+        {
+            <span class="cal-section-chip"
+                  style="background:@(sec.Color + "18"); color:@sec.Color; border-color:@(sec.Color + "44");">
+                <span class="cal-section-swatch" style="background:@sec.Color;"></span>
+                @sec.Label
+                <span style="font-weight:500; opacity:.65;">
+                    @sec.StartDate.ToString("MMM d")–@sec.EndDate.ToString("MMM d")
+                </span>
+            </span>
+        }
+    </div>
+}
+
+@* ── Red day pills ─────────────────────────────────────────── *@
+@if (Sprint.HolidayDates.Count > 0)
+{
+    <div class="cal-holiday-pills">
+        <span style="font-size:.75rem; font-weight:700; color:var(--text-secondary);">Red days:</span>
+        @foreach (var h in Sprint.HolidayDates.OrderBy(x => x))
+        {
+            <span style="font-size:.73rem; background:var(--red-faint); color:var(--red);
+                         border:1px solid var(--red-light); border-radius:var(--r-full);
+                         padding:2px 10px; font-weight:700;">
+                @h.ToString("MMM d")
+            </span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Sprint? Sprint { get; set; }
+    [Parameter] public EventCallback<Sprint> SprintChanged { get; set; }
+    [Parameter] public IEnumerable<TeamMember>? Members { get; set; }
+    [Parameter] public IEnumerable<LeaveEntry>? Leaves { get; set; }
+    [Parameter] public bool Readonly { get; set; }
+
+    // ── Color palette ──────────────────────────────────────────────
+    private static readonly string[] Palette =
+    [
+        "#6366f1","#10b981","#f59e0b","#ef4444",
+        "#06b6d4","#a855f7","#ec4899","#0ea5e9"
+    ];
+
+    private static string MemberColor(string memberId)
+    {
+        var h = memberId.Aggregate(0, (acc, c) => acc * 31 + c);
+        return Palette[Math.Abs(h) % Palette.Length];
+    }
+
+    private static string Initials(string name)
+    {
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{parts[0][0]}{parts[^1][0]}".ToUpper()
+            : name[..Math.Min(2, name.Length)].ToUpper();
+    }
+
+    // ── Leave helpers ──────────────────────────────────────────────
+    private static bool IsAbsent(string memberId, DateOnly day, List<LeaveEntry> leaves) =>
+        leaves.Any(l => l.TeamMemberId == memberId
+                     && l.StartDate <= day && l.EndDate >= day
+                     && !l.IsPartialDay);
+
+    private static bool IsPartial(string memberId, DateOnly day, List<LeaveEntry> leaves) =>
+        leaves.Any(l => l.TeamMemberId == memberId
+                     && l.StartDate <= day && l.EndDate >= day
+                     && l.IsPartialDay);
+
+    // ── Interaction ────────────────────────────────────────────────
+    private async Task ToggleHoliday(DateOnly day, bool inSprint, bool isWeekend)
+    {
+        if (Readonly || !inSprint || isWeekend || Sprint == null) return;
+
+        if (Sprint.HolidayDates.Contains(day))
+            Sprint.HolidayDates.Remove(day);
+        else
+            Sprint.HolidayDates.Add(day);
+
+        await SprintChanged.InvokeAsync(Sprint);
+    }
+
+    private static string CellTitle(DateOnly day, bool isHoliday, bool isWeekend, bool inSprint, int awayCount, string? sectionLabel)
+    {
+        if (!inSprint)  return $"{day:MMM d} — outside sprint";
+        if (isHoliday)  return $"{day:ddd MMM d} — red day (click to remove)";
+        if (isWeekend)  return $"{day:ddd MMM d} — weekend";
+        var s = $"{day:ddd MMM d}";
+        if (sectionLabel != null) s += $" · {sectionLabel}";
+        if (awayCount > 0) s += $" — {awayCount} away";
+        s += " (click to mark as red day)";
+        return s;
+    }
+}

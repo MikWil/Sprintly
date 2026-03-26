@@ -1,0 +1,181 @@
+/* ══════════════════════════════════════════════════════════════════
+   NavMenu scoped styles.
+   NOTE: .sidebar-link styles live in app.css (global) because
+   Blazor's CSS isolation does NOT apply scope attributes to the <a>
+   rendered by the NavLink child component.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Brand bar ──────────────────────────────────────────────────── */
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.1rem;
+    height: 66px;
+    flex-shrink: 0;
+    position: relative;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+/* Ambient glow behind the logo */
+.sidebar-brand::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 140% 140% at -10% -10%, rgba(99,102,241,.18) 0%, transparent 55%);
+    pointer-events: none;
+}
+
+.brand-link {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    text-decoration: none;
+    position: relative;
+    z-index: 1;
+}
+
+.brand-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: linear-gradient(150deg, #818cf8 0%, #6366f1 60%, #4f46e5 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow:
+        0 0 0 1.5px rgba(255,255,255,.14) inset,
+        0 3px 14px rgba(99,102,241,.55);
+}
+
+.brand-wordmark {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    position: relative;
+    z-index: 1;
+}
+
+.brand-name {
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: -.04em;
+    color: #fff;
+    line-height: 1.1;
+}
+
+.brand-sub {
+    font-size: .56rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.3);
+    line-height: 1;
+}
+
+.sidebar-toggler {
+    display: none;
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,.45);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: .3rem .4rem;
+    border-radius: 7px;
+    line-height: 1;
+    transition: background .15s, color .15s;
+    position: relative;
+    z-index: 1;
+}
+.sidebar-toggler:hover { background: rgba(255,255,255,.08); color: #fff; }
+
+/* ── Sidebar body ────────────────────────────────────────────────── */
+.sidebar-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.1rem .65rem .75rem;
+}
+
+/* ── Nav section ─────────────────────────────────────────────────── */
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.nav-group-label {
+    font-size: .57rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.2);
+    margin: 0 0 .4rem .3rem;
+    padding: 0;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+.sidebar-footer {
+    margin-top: auto;
+    padding: .9rem .4rem .55rem;
+    border-top: 1px solid rgba(255,255,255,.05);
+}
+
+.sidebar-status {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.sidebar-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+    flex-shrink: 0;
+    box-shadow: 0 0 5px rgba(16,185,129,.6);
+    animation: statusPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .45; }
+}
+
+.sidebar-status--none .sidebar-status-dot {
+    background: rgba(255,255,255,.2);
+    box-shadow: none;
+    animation: none;
+}
+
+.sidebar-status-label {
+    font-size: .72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,.5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-status--none .sidebar-status-label {
+    color: rgba(255,255,255,.2);
+    font-weight: 500;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────── */
+@media (max-width: 640.98px) {
+    .sidebar-toggler { display: flex; align-items: center; }
+    .sidebar-body.collapse { display: none; }
+}
+
+@media (min-width: 641px) {
+    .sidebar {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+    }
+    .sidebar-brand { flex-shrink: 0; }
+    .sidebar-body { flex: 1; display: flex !important; }
+}

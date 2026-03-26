@@ -1,0 +1,283 @@
+@page "/leave"
+@inject AppStateService AppState
+@implements IDisposable
+
+<PageTitle>Leave — Sprintly</PageTitle>
+
+<div class="page-title">
+    <h1>Leave</h1>
+    <button class="btn btn-primary btn-sm" @onclick="StartAdd"
+            disabled="@(AppState.GetActiveSprint() == null || !AppState.State.TeamMembers.Any(m => m.IsActive))">
+        <i class="bi bi-plus-lg me-1"></i>Add leave
+    </button>
+</div>
+
+@{
+    var sprint = AppState.GetActiveSprint();
+    var activeMembers = AppState.State.TeamMembers.Where(m => m.IsActive).ToList();
+}
+
+@if (sprint == null)
+{
+    <div class="empty-state">
+        <div class="empty-icon">📅</div>
+        <p>No active sprint. <a href="sprint">Create a sprint</a> first.</p>
+    </div>
+    return;
+}
+
+@if (activeMembers.Count == 0)
+{
+    <div class="empty-state">
+        <div class="empty-icon">👥</div>
+        <p>No active team members. <a href="team">Add team members</a> first.</p>
+    </div>
+    return;
+}
+
+@* ── Leave form ───────────────────────────────────────────────────────── *@
+@if (showForm)
+{
+    <div class="form-section mb-4">
+        <h2 class="mb-3">@(editingId == null ? "Add leave" : "Edit leave")</h2>
+        <div class="row g-3">
+            <div class="col-12 col-md-3">
+                <label class="form-label">Team member <span class="text-danger">*</span></label>
+                <select @bind="form.TeamMemberId" class="form-select">
+                    <option value="">— select —</option>
+                    @foreach (var m in activeMembers)
+                    {
+                        <option value="@m.Id">@m.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">Start date <span class="text-danger">*</span></label>
+                <input type="date" @bind="form.StartDate" @bind:format="yyyy-MM-dd" class="form-control"
+                       min="@sprint.StartDate.ToString("yyyy-MM-dd")"
+                       max="@sprint.EndDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">End date <span class="text-danger">*</span></label>
+                <input type="date" @bind="form.EndDate" @bind:format="yyyy-MM-dd" class="form-control"
+                       min="@sprint.StartDate.ToString("yyyy-MM-dd")"
+                       max="@sprint.EndDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label">Type</label>
+                <select @bind="form.Type" class="form-select">
+                    @foreach (var t in new[] { "Leave", "Training", "Conference", "Sick leave", "Other" })
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-1 d-flex align-items-end">
+                <div class="form-check pb-2">
+                    <input type="checkbox" @bind="form.IsPartialDay" class="form-check-input" id="partial" />
+                    <label class="form-check-label" for="partial">Partial</label>
+                </div>
+            </div>
+            @if (form.IsPartialDay)
+            {
+                <div class="col-6 col-md-1">
+                    <label class="form-label">Hours</label>
+                    <input type="number" @bind="form.Hours" class="form-control" min="0.5" max="23" step="0.5" />
+                </div>
+            }
+            <div class="col-12 col-md-3">
+                <label class="form-label">Note</label>
+                <input @bind="form.Note" class="form-control" placeholder="Optional" />
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(formError))
+        {
+            <div class="alert alert-danger mt-2 py-2">@formError</div>
+        }
+
+        <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary btn-sm" @onclick="SaveLeave">
+                <i class="bi bi-check-lg me-1"></i>Save
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="CancelForm">Cancel</button>
+        </div>
+    </div>
+}
+
+@* ── Sprint context banner ────────────────────────────────────────────── *@
+<div class="alert alert-light border mb-3 py-2 small">
+    <i class="bi bi-calendar3 me-1 text-primary"></i>
+    Showing leave for <strong>@sprint.Name</strong>
+    (@sprint.StartDate.ToString("MMM d") – @sprint.EndDate.ToString("MMM d, yyyy"))
+</div>
+
+@* ── Leave list ───────────────────────────────────────────────────────── *@
+@{
+    var sprintLeaves = AppState.GetLeaveForSprint(sprint).OrderBy(l => l.StartDate).ToList();
+}
+
+@if (sprintLeaves.Count == 0)
+{
+    <div class="empty-state">
+        <div class="empty-icon">☀️</div>
+        <p>No leave entries for this sprint.</p>
+    </div>
+}
+else
+{
+    <div class="sp-card">
+        <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Type</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Duration</th>
+                        <th>Note</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var leave in sprintLeaves)
+                    {
+                        var member = AppState.State.TeamMembers.FirstOrDefault(m => m.Id == leave.TeamMemberId);
+                        <tr>
+                            <td class="fw-medium align-middle">@(member?.Name ?? "Unknown")</td>
+                            <td class="align-middle"><span class="badge bg-secondary-subtle text-secondary">@leave.Type</span></td>
+                            <td class="align-middle">@leave.StartDate.ToString("MMM d")</td>
+                            <td class="align-middle">@leave.EndDate.ToString("MMM d, yyyy")</td>
+                            <td class="align-middle text-muted">
+                                @if (leave.IsPartialDay)
+                                {
+                                    <span>@leave.Hours h (partial)</span>
+                                }
+                                else
+                                {
+                                    var days = (leave.EndDate.DayNumber - leave.StartDate.DayNumber + 1);
+                                    <span>@days day@(days == 1 ? "" : "s")</span>
+                                }
+                            </td>
+                            <td class="align-middle text-muted small">@leave.Note</td>
+                            <td class="text-end align-middle">
+                                <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => StartEdit(leave)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLeave(leave.Id)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                </table>
+    </div>
+}
+
+@code {
+    private bool showForm;
+    private string? editingId;
+    private string? formError;
+
+    private LeaveForm form = new();
+
+    protected override void OnInitialized() =>
+        AppState.OnChange += StateHasChanged;
+
+    private void StartAdd()
+    {
+        var sprint = AppState.GetActiveSprint();
+        form = new LeaveForm
+        {
+            StartDate = sprint?.StartDate.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today,
+            EndDate = sprint?.StartDate.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today
+        };
+        editingId = null;
+        formError = null;
+        showForm = true;
+    }
+
+    private void StartEdit(LeaveEntry l)
+    {
+        form = new LeaveForm
+        {
+            TeamMemberId = l.TeamMemberId,
+            StartDate = l.StartDate.ToDateTime(TimeOnly.MinValue),
+            EndDate = l.EndDate.ToDateTime(TimeOnly.MinValue),
+            IsPartialDay = l.IsPartialDay,
+            Hours = l.Hours,
+            Type = l.Type,
+            Note = l.Note
+        };
+        editingId = l.Id;
+        formError = null;
+        showForm = true;
+    }
+
+    private async Task SaveLeave()
+    {
+        formError = null;
+        var sprint = AppState.GetActiveSprint();
+
+        if (string.IsNullOrEmpty(form.TeamMemberId))
+        {
+            formError = "Please select a team member.";
+            return;
+        }
+        var start = DateOnly.FromDateTime(form.StartDate);
+        var end = DateOnly.FromDateTime(form.EndDate);
+        if (start > end)
+        {
+            formError = "Start date must be before or equal to end date.";
+            return;
+        }
+        if (sprint != null && (end < sprint.StartDate || start > sprint.EndDate))
+        {
+            formError = "Leave dates must overlap with the active sprint.";
+            return;
+        }
+        if (form.IsPartialDay && form.Hours <= 0)
+        {
+            formError = "Partial day hours must be > 0.";
+            return;
+        }
+
+        var entry = new LeaveEntry
+        {
+            Id = editingId ?? Guid.NewGuid().ToString(),
+            TeamMemberId = form.TeamMemberId,
+            StartDate = DateOnly.FromDateTime(form.StartDate),
+            EndDate = DateOnly.FromDateTime(form.EndDate),
+            IsPartialDay = form.IsPartialDay,
+            Hours = form.IsPartialDay ? form.Hours : 0,
+            Type = form.Type,
+            Note = form.Note
+        };
+
+        if (editingId == null)
+            await AppState.AddLeaveAsync(entry);
+        else
+            await AppState.UpdateLeaveAsync(entry);
+
+        showForm = false;
+    }
+
+    private async Task RemoveLeave(string id) =>
+        await AppState.RemoveLeaveAsync(id);
+
+    private void CancelForm() => showForm = false;
+
+    public void Dispose() => AppState.OnChange -= StateHasChanged;
+
+    private class LeaveForm
+    {
+        public string TeamMemberId { get; set; } = "";
+        public DateTime StartDate { get; set; } = DateTime.Today;
+        public DateTime EndDate { get; set; } = DateTime.Today;
+        public bool IsPartialDay { get; set; }
+        public double Hours { get; set; } = 4;
+        public string Type { get; set; } = "Leave";
+        public string Note { get; set; } = "";
+    }
+}

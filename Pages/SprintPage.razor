@@ -1,0 +1,447 @@
+@page "/sprint"
+@inject AppStateService AppState
+@implements IDisposable
+
+<PageTitle>Sprints — Sprintly</PageTitle>
+
+<div class="page-title">
+    <h1>Sprints</h1>
+    <button class="btn btn-primary btn-sm" @onclick="StartAdd">
+        <i class="bi bi-plus-lg me-1"></i>New sprint
+    </button>
+</div>
+
+@* ── Sprint form ──────────────────────────────────────────────────────── *@
+@if (showForm)
+{
+    <div class="form-section mb-4">
+        <h2 class="mb-3">@(editingId == null ? "New sprint" : "Edit sprint")</h2>
+        <div class="row g-3">
+            <div class="col-12 col-md-4">
+                <label class="form-label">Sprint name <span class="text-danger">*</span></label>
+                <input @bind="form.Name" class="form-control" placeholder="e.g. Sprint 42" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">Start date <span class="text-danger">*</span></label>
+                <input type="date" @bind="form.StartDate" @bind:format="yyyy-MM-dd" class="form-control" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">End date <span class="text-danger">*</span></label>
+                <input type="date" @bind="form.EndDate" @bind:format="yyyy-MM-dd" class="form-control" />
+            </div>
+            <div class="col-12 col-md-2 d-flex align-items-end">
+                <div class="form-check pb-2">
+                    <input type="checkbox" @bind="form.ExcludeWeekends" class="form-check-input" id="excWknd" />
+                    <label class="form-check-label" for="excWknd">Exclude weekends</label>
+                </div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(formError))
+        {
+            <div class="alert alert-danger mt-2 py-2">@formError</div>
+        }
+
+        @if (previewSprint != null)
+        {
+            <div class="mt-3">
+                <div class="mb-2 small fw-semibold text-muted">
+                    SPRINT CALENDAR — Click working days to mark as red days
+                </div>
+                <CalendarView Sprint="previewSprint" SprintChanged="OnCalendarChanged" />
+                <div class="mt-2 small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    @CapacityCalculator.CountWorkingDays(previewSprint) working days in this sprint.
+                </div>
+            </div>
+        }
+
+        @* ── Capacity buffers ──────────────────────────────────────── *@
+        <div class="sp-divider"></div>
+
+        <div class="d-flex align-items-center justify-content-between mb-1">
+            <div>
+                <span class="fw-semibold" style="font-size:.93rem;">Capacity Buffers</span>
+                <span class="ms-2 small text-muted">Reserve a % of total capacity for overhead</span>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="AddBuffer">
+                <i class="bi bi-plus-lg me-1"></i>Add buffer
+            </button>
+        </div>
+
+        @if (form.Buffers.Count == 0)
+        {
+            <div class="small text-muted py-2">
+                No buffers — all calculated hours are available for sprint work.
+            </div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-2 mt-2">
+                @foreach (var buf in form.Buffers)
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        <input class="form-control form-control-sm"
+                               @bind="buf.Label"
+                               placeholder="e.g. Bug fixing, Meetings, Code review"
+                               style="flex:1;" />
+                        <div class="input-group input-group-sm" style="width:120px; flex-shrink:0;">
+                            <input type="number" class="form-control" @bind="buf.Percentage"
+                                   min="1" max="100" step="1" />
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveBuffer(buf)">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+
+            <div class="buffer-total-row">
+                <span>
+                    Total buffer:
+                    <strong style="color:@(TotalBufferPct >= 80 ? "var(--red)" : TotalBufferPct > 50 ? "var(--amber)" : "var(--brand)");">
+                        @TotalBufferPct%
+                    </strong>
+                </span>
+                <span class="text-muted">·</span>
+                <span class="text-muted">@(100 - TotalBufferPct)% of capacity available for sprint work</span>
+            </div>
+        }
+
+        @* ── Sprint sections ───────────────────────────────────────── *@
+        <div class="sp-divider"></div>
+
+        <div class="d-flex align-items-center justify-content-between mb-1">
+            <div>
+                <span class="fw-semibold" style="font-size:.93rem;">Sprint Sections</span>
+                <span class="ms-2 small text-muted">Label phases like Development, UAT, SIT</span>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="AddSection">
+                <i class="bi bi-plus-lg me-1"></i>Add section
+            </button>
+        </div>
+
+        @if (form.Sections.Count == 0)
+        {
+            <div class="small text-muted py-2">
+                No sections — the whole sprint is treated as one phase.
+            </div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-2 mt-2">
+                @foreach (var sec in form.Sections)
+                {
+                    <div class="section-row">
+                        <input class="form-control form-control-sm section-label-input"
+                               @bind="sec.Label"
+                               placeholder="e.g. Development, UAT, SIT, Code Freeze" />
+                        <div class="d-flex align-items-center gap-1" style="flex-shrink:0;">
+                            <input type="date" class="form-control form-control-sm"
+                                   @bind="sec.StartDate" @bind:format="yyyy-MM-dd"
+                                   style="width:130px;" />
+                            <span class="text-muted small">–</span>
+                            <input type="date" class="form-control form-control-sm"
+                                   @bind="sec.EndDate" @bind:format="yyyy-MM-dd"
+                                   style="width:130px;" />
+                        </div>
+                        <div class="section-color-picker">
+                            @foreach (var (name, hex) in SectionColorPalette)
+                            {
+                                <button type="button"
+                                        class="color-swatch @(sec.Color == hex ? "selected" : "")"
+                                        style="background:@hex"
+                                        title="@name"
+                                        @onclick="() => sec.Color = hex">
+                                </button>
+                            }
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" style="flex-shrink:0;"
+                                @onclick="() => RemoveSection(sec)">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary btn-sm" @onclick="SaveSprint">
+                <i class="bi bi-check-lg me-1"></i>Save
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="CancelForm">Cancel</button>
+        </div>
+    </div>
+}
+
+@* ── Sprint list ──────────────────────────────────────────────────────── *@
+@if (AppState.State.Sprints.Count == 0)
+{
+    <div class="empty-state">
+        <div class="empty-icon">📅</div>
+        <p>No sprints yet. Create your first sprint to begin.</p>
+    </div>
+}
+else
+{
+    <div class="d-flex flex-column gap-3">
+        @foreach (var s in AppState.State.Sprints.OrderByDescending(x => x.StartDate))
+        {
+            var isActive = s.Id == AppState.State.ActiveSprintId;
+            var workingDays = CapacityCalculator.CountWorkingDays(s);
+            var totalBufPct = s.Buffers.Sum(b => b.Percentage);
+            <div class="sprint-item @(isActive ? "active" : "")">
+                <div>
+                    <div class="d-flex align-items-start justify-content-between">
+                        <div>
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="fw-semibold fs-6">@s.Name</span>
+                                @if (isActive)
+                                {
+                                    <span class="badge bg-primary">Active</span>
+                                }
+                            </div>
+                            <div class="small text-muted">
+                                @s.StartDate.ToString("MMM d") – @s.EndDate.ToString("MMM d, yyyy")
+                                &nbsp;·&nbsp; @workingDays working day@(workingDays == 1 ? "" : "s")
+                                @if (s.HolidayDates.Count > 0)
+                                {
+                                    <span> · @s.HolidayDates.Count red day@(s.HolidayDates.Count == 1 ? "" : "s")</span>
+                                }
+                                    @if (totalBufPct > 0)
+                                {
+                                    <span> · <i class="bi bi-shield-fill-minus" style="color:var(--amber);"></i> @totalBufPct% buffer</span>
+                                }
+                                @if (s.Sections.Count > 0)
+                                {
+                                    <span> · </span>
+                                    @foreach (var sec in s.Sections)
+                                    {
+                                        <span class="section-chip"
+                                              style="background:@(sec.Color + "22"); color:@sec.Color; border-color:@(sec.Color + "55");">
+                                            @sec.Label
+                                        </span>
+                                    }
+                                }
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            @if (!isActive)
+                            {
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => SetActive(s.Id)">
+                                    Set active
+                                </button>
+                            }
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(s)">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveSprint(s.Id)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool showForm;
+    private string? editingId;
+    private string? formError;
+    private Sprint? previewSprint;
+
+    private SprintForm form = new();
+
+    protected override void OnInitialized() =>
+        AppState.OnChange += OnStateChanged;
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void StartAdd()
+    {
+        form = new SprintForm();
+        editingId = null;
+        formError = null;
+        UpdatePreview();
+        showForm = true;
+    }
+
+    private void StartEdit(Sprint s)
+    {
+        form = new SprintForm
+        {
+            Name = s.Name,
+            StartDate = s.StartDate.ToDateTime(TimeOnly.MinValue),
+            EndDate = s.EndDate.ToDateTime(TimeOnly.MinValue),
+            ExcludeWeekends = s.ExcludeWeekends,
+            HolidayDates = [.. s.HolidayDates],
+            Buffers = s.Buffers.Select(b => new SprintBuffer
+            {
+                Id = b.Id,
+                Label = b.Label,
+                Percentage = b.Percentage
+            }).ToList(),
+            Sections = s.Sections.Select(sec => new SectionForm
+            {
+                Id = sec.Id,
+                Label = sec.Label,
+                StartDate = sec.StartDate.ToDateTime(TimeOnly.MinValue),
+                EndDate = sec.EndDate.ToDateTime(TimeOnly.MinValue),
+                Color = sec.Color
+            }).ToList()
+        };
+        editingId = s.Id;
+        formError = null;
+        UpdatePreview();
+        showForm = true;
+    }
+
+    private void UpdatePreview()
+    {
+        var start = DateOnly.FromDateTime(form.StartDate);
+        var end = DateOnly.FromDateTime(form.EndDate);
+        if (start <= end)
+        {
+            previewSprint = new Sprint
+            {
+                Id = editingId ?? "preview",
+                Name = form.Name,
+                StartDate = start,
+                EndDate = end,
+                ExcludeWeekends = form.ExcludeWeekends,
+                HolidayDates = [.. form.HolidayDates]
+            };
+        }
+        else
+        {
+            previewSprint = null;
+        }
+    }
+
+    private void OnCalendarChanged(Sprint updated)
+    {
+        form.HolidayDates = [.. updated.HolidayDates];
+        UpdatePreview();
+    }
+
+    private double TotalBufferPct => form.Buffers.Sum(b => b.Percentage);
+
+    private void AddBuffer() =>
+        form.Buffers.Add(new SprintBuffer { Label = "", Percentage = 10 });
+
+    private void RemoveBuffer(SprintBuffer buf) =>
+        form.Buffers.Remove(buf);
+
+    // ── Section helpers ─────────────────────────────────────────────
+    private static readonly (string Name, string Hex)[] SectionColorPalette =
+    [
+        ("Indigo — Development", "#6366f1"),
+        ("Green — UAT",          "#10b981"),
+        ("Amber — SIT",          "#f59e0b"),
+        ("Red — Freeze",         "#ef4444"),
+        ("Cyan — Review",        "#06b6d4"),
+        ("Purple — Integration", "#a855f7")
+    ];
+
+    // Helpers to build semi-transparent hex colors for chips in the list view
+    private static string Hex22(string c) => c + "22";
+    private static string Hex40(string c) => c + "40";
+
+    private void AddSection()
+    {
+        var start = form.StartDate;
+        var end   = form.EndDate;
+        form.Sections.Add(new SectionForm
+        {
+            Label     = "",
+            StartDate = start,
+            EndDate   = end,
+            Color     = SectionColorPalette[form.Sections.Count % SectionColorPalette.Length].Hex
+        });
+    }
+
+    private void RemoveSection(SectionForm sec) =>
+        form.Sections.Remove(sec);
+
+    private async Task SaveSprint()
+    {
+        formError = null;
+        if (string.IsNullOrWhiteSpace(form.Name))
+        {
+            formError = "Sprint name is required.";
+            return;
+        }
+        var start = DateOnly.FromDateTime(form.StartDate);
+        var end = DateOnly.FromDateTime(form.EndDate);
+        if (start > end)
+        {
+            formError = "Start date must be before or equal to end date.";
+            return;
+        }
+
+        var sprint = new Sprint
+        {
+            Id = editingId ?? Guid.NewGuid().ToString(),
+            Name = form.Name.Trim(),
+            StartDate = start,
+            EndDate = end,
+            ExcludeWeekends = form.ExcludeWeekends,
+            HolidayDates = [.. form.HolidayDates],
+            Buffers = form.Buffers
+                .Where(b => !string.IsNullOrWhiteSpace(b.Label) && b.Percentage > 0)
+                .Select(b => new SprintBuffer { Id = b.Id, Label = b.Label.Trim(), Percentage = b.Percentage })
+                .ToList(),
+            Sections = form.Sections
+                .Where(s => !string.IsNullOrWhiteSpace(s.Label))
+                .Select(s => new SprintSection
+                {
+                    Id = s.Id,
+                    Label = s.Label.Trim(),
+                    StartDate = DateOnly.FromDateTime(s.StartDate),
+                    EndDate = DateOnly.FromDateTime(s.EndDate),
+                    Color = s.Color
+                })
+                .ToList()
+        };
+
+        if (editingId == null)
+            await AppState.AddSprintAsync(sprint);
+        else
+            await AppState.UpdateSprintAsync(sprint);
+
+        showForm = false;
+    }
+
+    private async Task SetActive(string id) =>
+        await AppState.SetActiveSprintAsync(id);
+
+    private async Task RemoveSprint(string id) =>
+        await AppState.RemoveSprintAsync(id);
+
+    private void CancelForm() => showForm = false;
+
+    public void Dispose() => AppState.OnChange -= OnStateChanged;
+
+    private class SprintForm
+    {
+        public string Name { get; set; } = "";
+        public DateTime StartDate { get; set; } = DateTime.Today;
+        public DateTime EndDate { get; set; } = DateTime.Today.AddDays(13);
+        public bool ExcludeWeekends { get; set; } = true;
+        public List<DateOnly> HolidayDates { get; set; } = [];
+        public List<SprintBuffer> Buffers { get; set; } = [];
+        public List<SectionForm> Sections { get; set; } = [];
+    }
+
+    private class SectionForm
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Label { get; set; } = "";
+        public DateTime StartDate { get; set; } = DateTime.Today;
+        public DateTime EndDate { get; set; } = DateTime.Today;
+        public string Color { get; set; } = "#6366f1";
+    }
+}

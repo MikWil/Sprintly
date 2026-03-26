@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Sprintly.csproj" />
+  <Project Path="..\Sprintly.Tests\Sprintly.Tests.csproj" />
+</Solution>

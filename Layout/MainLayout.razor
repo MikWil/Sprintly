@@ -1,0 +1,88 @@
+@inherits LayoutComponentBase
+@inject AppStateService AppState
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 justify-content-between">
+
+            @* ── Active sprint context ── *@
+            <div class="top-sprint-context">
+                @if (activeSprint != null)
+                {
+                    <span class="top-sprint-badge">
+                        <i class="bi bi-lightning-charge-fill"></i>
+                        @activeSprint.Name
+                    </span>
+                    <span class="top-sprint-dates">
+                        @activeSprint.StartDate.ToString("MMM d") – @activeSprint.EndDate.ToString("MMM d, yyyy")
+                    </span>
+                }
+                else
+                {
+                    <span class="top-sprint-empty">
+                        <i class="bi bi-exclamation-circle me-1"></i>No active sprint
+                    </span>
+                }
+            </div>
+
+            @* ── Actions ── *@
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ExportJson" title="Export JSON backup">
+                    <i class="bi bi-download me-1"></i>Export
+                </button>
+                <label class="btn btn-sm btn-outline-secondary mb-0" title="Import JSON backup" style="cursor:pointer;">
+                    <i class="bi bi-upload me-1"></i>Import
+                    <InputFile OnChange="ImportJson" accept=".json" class="d-none" />
+                </label>
+            </div>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code {
+    private Sprint? activeSprint;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AppState.InitializeAsync();
+        AppState.OnChange += OnStateChanged;
+        activeSprint = AppState.GetActiveSprint();
+    }
+
+    private void OnStateChanged()
+    {
+        activeSprint = AppState.GetActiveSprint();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ExportJson()
+    {
+        var json = await AppState.ExportJsonAsync();
+        var fileName = $"sprintly-backup-{DateTime.Now:yyyy-MM-dd}.json";
+        await JS.InvokeVoidAsync("sprintly.downloadText", fileName, json);
+    }
+
+    private async Task ImportJson(InputFileChangeEventArgs e)
+    {
+        using var stream = e.File.OpenReadStream(maxAllowedSize: 1_048_576);
+        using var reader = new System.IO.StreamReader(stream);
+        var json = await reader.ReadToEndAsync();
+        await AppState.ImportJsonAsync(json);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        AppState.OnChange -= OnStateChanged;
+        return ValueTask.CompletedTask;
+    }
+}

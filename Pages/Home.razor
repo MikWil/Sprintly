@@ -1,0 +1,482 @@
+@page "/"
+@inject AppStateService AppState
+@implements IDisposable
+
+<PageTitle>Dashboard — Sprintly</PageTitle>
+
+<div class="page-title">
+    <h1>Dashboard</h1>
+    @if (AppState.State.Sprints.Count > 1)
+    {
+        <select class="form-select form-select-sm w-auto" value="@AppState.State.ActiveSprintId"
+                @onchange="ChangeSprint">
+            @foreach (var s in AppState.State.Sprints)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    }
+</div>
+
+@if (!AppState.IsLoaded)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border" style="color:var(--brand);"></div>
+    </div>
+    return;
+}
+
+@{
+    var sprint  = AppState.GetActiveSprint();
+    var members = AppState.State.TeamMembers;
+}
+
+@if (sprint == null)
+{
+    <div class="empty-state">
+        <span class="empty-icon">📅</span>
+        <h5>No active sprint</h5>
+        <p>Create a sprint to start planning capacity.</p>
+        <a href="sprint" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Create sprint
+        </a>
+    </div>
+    return;
+}
+
+@if (members.Count == 0)
+{
+    <div class="empty-state">
+        <span class="empty-icon">👥</span>
+        <h5>No team members yet</h5>
+        <p>Add your team before calculating capacity.</p>
+        <a href="team" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Add team members
+        </a>
+    </div>
+    return;
+}
+
+@{
+    var leaves = AppState.GetLeaveForSprint(sprint).ToList();
+    var result = CapacityCalculator.Calculate(members, sprint, leaves);
+    var totalLeaveDays = members
+        .Where(m => m.IsActive)
+        .Sum(m => CapacityCalculator.CountLeaveDays(m, sprint, leaves.Where(l => l.TeamMemberId == m.Id)));
+    var redDayCount = sprint.HolidayDates.Count;
+}
+
+@* ── Warnings ─────────────────────────────────────────────────────── *@
+@if (result.Warnings.Count > 0)
+{
+    <div class="warning-list mb-3">
+        @foreach (var w in result.Warnings)
+        {
+            <div class="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i>@w
+            </div>
+        }
+    </div>
+}
+
+@* ── KPI cards ────────────────────────────────────────────────────── *@
+<div class="row g-3 mb-3">
+    <div class="col-6 col-xl">
+        <CapacityCard Label="@(result.BufferPercentage > 0 ? "Effective Hours" : "Total Hours")"
+                      Value="@result.TotalHours.ToString("F1")"
+                      SubText="@(result.BufferPercentage > 0 ? $"{result.TotalHoursGross:F1} h raw · {result.BufferPercentage:F0}% buffered" : $"{result.WorkingDaysInSprint} working days")"
+                      Icon="clock-history" Variant="blue" />
+    </div>
+    <div class="col-6 col-xl">
+        <CapacityCard Label="Person-Days"
+                      Value="@result.TotalPersonDays.ToString("F1")"
+                      SubText="At 8 h / day"
+                      Icon="person-check-fill" Variant="green" />
+    </div>
+    <div class="col-6 col-xl">
+        <CapacityCard Label="Active Members"
+                      Value="@members.Count(m => m.IsActive).ToString()"
+                      SubText="@(members.Count(m => !m.IsActive) > 0 ? $"{members.Count(m => !m.IsActive)} inactive" : "All active")"
+                      Icon="people-fill" Variant="purple" />
+    </div>
+    <div class="col-6 col-xl">
+        <CapacityCard Label="Sprint Days"
+                      Value="@result.WorkingDaysInSprint.ToString()"
+                      SubText="@(redDayCount > 0 ? $"{redDayCount} red day{(redDayCount == 1 ? "" : "s")} excluded" : "No red days")"
+                      Icon="calendar3" Variant="amber" />
+    </div>
+    <div class="col-6 col-xl">
+        <CapacityCard Label="Days Off"
+                      Value="@((redDayCount + (int)Math.Ceiling(totalLeaveDays)).ToString())"
+                      SubText="@($"{redDayCount} red day{(redDayCount == 1 ? "" : "s")} · {totalLeaveDays:F1} personal leave")"
+                      Icon="calendar-x-fill" Variant="red" />
+    </div>
+</div>
+
+@* ── Buffer strip (only shown when buffers are configured) ─────────── *@
+@if (result.BufferPercentage > 0)
+{
+    <div class="buffer-strip mb-4">
+        <div class="buffer-strip-left">
+            <i class="bi bi-shield-fill-minus buffer-strip-icon"></i>
+            <span class="buffer-strip-heading">Capacity Buffers</span>
+            <div class="buffer-strip-pills">
+                @foreach (var kv in result.BufferBreakdown)
+                {
+                    var pct = sprint.Buffers.FirstOrDefault(b => b.Label == kv.Key)?.Percentage ?? 0;
+                    <span class="buffer-pill">@kv.Key <strong>@pct%</strong></span>
+                }
+            </div>
+        </div>
+        <div class="buffer-strip-right">
+            <span class="buffer-strip-item">
+                <span class="buffer-strip-label">Raw</span>
+                <span class="buffer-strip-val">@result.TotalHoursGross.ToString("F1") h</span>
+            </span>
+            <i class="bi bi-arrow-right buffer-strip-arrow"></i>
+            <span class="buffer-strip-item">
+                <span class="buffer-strip-label">Reserved</span>
+                <span class="buffer-strip-val" style="color:var(--amber);">−@result.BufferHours.ToString("F1") h</span>
+            </span>
+            <i class="bi bi-arrow-right buffer-strip-arrow"></i>
+            <span class="buffer-strip-item">
+                <span class="buffer-strip-label">Net</span>
+                <span class="buffer-strip-val" style="color:var(--brand); font-weight:700;">@result.TotalHours.ToString("F1") h</span>
+            </span>
+        </div>
+    </div>
+}
+
+@* ── Weekly availability breakdown ───────────────────────────────── *@
+@if (result.CapacityByWeek.Count > 0)
+{
+    <div class="section-hd">
+        <span class="section-title">
+            <i class="bi bi-bar-chart-steps"></i>
+            Availability by Week
+        </span>
+        @if (sprint.Sections.Count == 0)
+        {
+            <a href="sprint" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-tag me-1"></i>Add sections
+            </a>
+        }
+    </div>
+    <div class="sp-card mb-4" style="padding:0; overflow:hidden;">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th style="padding-left:1rem;">Week</th>
+                    <th>Phase</th>
+                    <th style="text-align:right;">Working days</th>
+                    <th style="text-align:right;">@(result.BufferPercentage > 0 ? "Gross hours" : "Hours")</th>
+                    @if (result.BufferPercentage > 0)
+                    {
+                        <th style="text-align:right;">Net hours</th>
+                    }
+                    <th style="text-align:right; padding-right:1rem;">Share</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var wk in result.CapacityByWeek)
+                {
+                    var sharePct = result.TotalHoursGross > 0
+                        ? (int)Math.Round(wk.HoursGross / result.TotalHoursGross * 100)
+                        : 0;
+                    <tr>
+                        <td style="padding-left:1rem; font-variant-numeric:tabular-nums; white-space:nowrap;">
+                            <span style="font-weight:600;">@wk.Start.ToString("MMM d")</span>
+                            <span style="color:var(--text-muted);">–@wk.End.ToString("MMM d")</span>
+                        </td>
+                        <td>
+                            @if (wk.SectionLabel != null)
+                            {
+                                <span class="section-chip"
+                                      style="background:@(wk.SectionColor + "1a"); color:@wk.SectionColor; border-color:@(wk.SectionColor + "44");">
+                                    @wk.SectionLabel
+                                </span>
+                            }
+                            else
+                            {
+                                <span style="color:var(--text-muted); font-size:.8rem;">—</span>
+                            }
+                        </td>
+                        <td style="text-align:right; color:var(--text-muted);">@wk.WorkingDays</td>
+                        <td style="text-align:right; font-variant-numeric:tabular-nums; font-weight:600;">
+                            @wk.HoursGross.ToString("F1")
+                        </td>
+                        @if (result.BufferPercentage > 0)
+                        {
+                            <td style="text-align:right; font-variant-numeric:tabular-nums; font-weight:700; color:var(--brand);">
+                                @wk.Hours.ToString("F1")
+                            </td>
+                        }
+                        <td style="padding-right:1rem;">
+                            <div class="week-share-bar">
+                                <div class="week-share-fill" style="width:@sharePct%;
+                                     background:@(wk.SectionColor ?? "var(--brand)");"></div>
+                                <span class="week-share-pct">@sharePct%</span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td style="padding-left:1rem; font-weight:700;" colspan="3">Total</td>
+                    <td style="text-align:right; font-weight:700; font-variant-numeric:tabular-nums; color:var(--brand-dark);">
+                        @result.TotalHoursGross.ToString("F1")
+                    </td>
+                    @if (result.BufferPercentage > 0)
+                    {
+                        <td style="text-align:right; font-weight:800; font-variant-numeric:tabular-nums; color:var(--brand);">
+                            @result.TotalHours.ToString("F1")
+                        </td>
+                    }
+                    <td style="padding-right:1rem;"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+}
+
+@* ── Team presence calendar ───────────────────────────────────────── *@
+<div class="section-hd">
+    <span class="section-title">
+        <i class="bi bi-grid-3x3-gap"></i>
+        Team Presence · @sprint.Name
+    </span>
+    <a href="leave" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-calendar-x me-1"></i>Manage leave
+    </a>
+</div>
+
+<div class="mb-4">
+    <CalendarView Sprint="sprint"
+                  Members="members"
+                  Leaves="leaves"
+                  Readonly="true" />
+</div>
+
+@* ── Capacity tables ──────────────────────────────────────────────── *@
+<div class="row g-3">
+
+    @* By person *@
+    <div class="col-12 col-lg-7">
+        <div class="sp-card">
+            <div class="sp-card-header">
+                <i class="bi bi-person-lines-fill"></i>
+                Capacity by Person
+            </div>
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        <th>Role</th>
+                        <th style="text-align:right;">Hours</th>
+                        <th style="text-align:right;">Days</th>
+                        <th style="text-align:right; width:100px;">Share</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var member in members.Where(m => m.IsActive))
+                    {
+                        var h   = result.HoursByPerson.GetValueOrDefault(member.Name, 0);
+                        var pct = result.TotalHoursGross > 0
+                            ? (int)Math.Round(h / result.TotalHoursGross * 100) : 0;
+                        <tr>
+                            <td>
+                                <div style="display:flex; align-items:center; gap:.5rem;">
+                                    <div style="width:22px; height:22px; border-radius:50%;
+                                                background:@MemberColor(member.Id);
+                                                display:flex; align-items:center; justify-content:center;
+                                                font-size:8px; font-weight:800; color:white; flex-shrink:0;
+                                                letter-spacing:-.02em;">
+                                        @Initials(member.Name)
+                                    </div>
+                                    <span style="font-weight:600;">@member.Name</span>
+                                </div>
+                            </td>
+                            <td><span class="role-badge">@member.Role</span></td>
+                            <td style="text-align:right; font-variant-numeric:tabular-nums; font-weight:600;">
+                                @h.ToString("F1")
+                            </td>
+                            <td style="text-align:right; color:var(--text-muted); font-variant-numeric:tabular-nums;">
+                                @((h / 8.0).ToString("F1"))
+                            </td>
+                            <td>
+                                <div style="display:flex; align-items:center; gap:.4rem;">
+                                    <div style="flex:1; height:5px; background:var(--surface-3);
+                                                border-radius:var(--r-full); min-width:44px; overflow:hidden;">
+                                        <div style="width:@pct%; height:100%;
+                                                    background:@MemberColor(member.Id);
+                                                    border-radius:var(--r-full);
+                                                    transition:width .4s var(--ease-out);">
+                                        </div>
+                                    </div>
+                                    <span style="font-size:.7rem; color:var(--text-muted);
+                                                 width:28px; text-align:right; font-weight:600;">
+                                        @pct%
+                                    </span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="2" style="font-weight:700; color:var(--text-secondary);">
+                            @(result.BufferPercentage > 0 ? "Gross total" : "Total")
+                        </td>
+                        <td style="text-align:right; font-variant-numeric:tabular-nums; font-weight:700; color:var(--brand-dark);">
+                            @result.TotalHoursGross.ToString("F1")
+                        </td>
+                        <td style="text-align:right; color:var(--text-muted); font-variant-numeric:tabular-nums;">
+                            @((result.TotalHoursGross / 8.0).ToString("F1"))
+                        </td>
+                        <td></td>
+                    </tr>
+                    @if (result.BufferPercentage > 0)
+                    {
+                        <tr style="color:var(--amber);">
+                            <td colspan="2" style="font-size:.8rem; padding-top:.15rem; padding-bottom:.15rem;">
+                                <i class="bi bi-shield-fill-minus me-1"></i>Buffer (@result.BufferPercentage.ToString("F0")%)
+                            </td>
+                            <td style="text-align:right; font-variant-numeric:tabular-nums; font-size:.85rem; font-weight:600;">
+                                −@result.BufferHours.ToString("F1")
+                            </td>
+                            <td style="text-align:right; font-variant-numeric:tabular-nums; font-size:.85rem; color:var(--text-muted);">
+                                −@((result.BufferHours / 8.0).ToString("F1"))
+                            </td>
+                            <td></td>
+                        </tr>
+                        <tr style="border-top:2px solid var(--border-strong);">
+                            <td colspan="2" style="font-weight:700; color:var(--brand-dark);">Net available</td>
+                            <td style="text-align:right; font-variant-numeric:tabular-nums; font-weight:800; color:var(--brand);">
+                                @result.TotalHours.ToString("F1")
+                            </td>
+                            <td style="text-align:right; color:var(--green); font-variant-numeric:tabular-nums; font-weight:700;">
+                                @result.TotalPersonDays.ToString("F1")
+                            </td>
+                            <td></td>
+                        </tr>
+                    }
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    @* Right col *@
+    <div class="col-12 col-lg-5 d-flex flex-column gap-3">
+
+        @* By role *@
+        <div class="sp-card">
+            <div class="sp-card-header">
+                <i class="bi bi-diagram-3-fill"></i>
+                Capacity by Role
+            </div>
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Role</th>
+                        <th style="text-align:right;">Hours</th>
+                        <th style="text-align:right;">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var kv in result.HoursByRole.OrderByDescending(x => x.Value))
+                    {
+                        var pct = result.TotalHoursGross > 0
+                            ? (int)Math.Round(kv.Value / result.TotalHoursGross * 100) : 0;
+                        <tr>
+                            <td><span class="role-badge">@kv.Key</span></td>
+                            <td style="text-align:right; font-variant-numeric:tabular-nums; font-weight:600;">
+                                @kv.Value.ToString("F1")
+                            </td>
+                            <td style="text-align:right; color:var(--text-muted);">@pct%</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* Sprint summary *@
+        <div class="sp-card">
+            <div class="sp-card-header">
+                <i class="bi bi-info-circle-fill"></i>
+                @sprint.Name
+            </div>
+            <div style="padding:.75rem 1rem 1rem;">
+                <dl class="sprint-dl">
+                    <dt>Start</dt>
+                    <dd>@sprint.StartDate.ToString("ddd, MMM d yyyy")</dd>
+                    <dt>End</dt>
+                    <dd>@sprint.EndDate.ToString("ddd, MMM d yyyy")</dd>
+                    <dt>Working days</dt>
+                    <dd>@result.WorkingDaysInSprint</dd>
+                    <dt>Red days</dt>
+                    <dd>
+                        @if (sprint.HolidayDates.Count == 0)
+                        {
+                            <span style="color:var(--text-muted);">None</span>
+                        }
+                        else
+                        {
+                            @string.Join(", ", sprint.HolidayDates.OrderBy(x => x).Select(x => x.ToString("MMM d")))
+                        }
+                    </dd>
+                    <dt>Total leave</dt>
+                    <dd>@totalLeaveDays.ToString("F1") days</dd>
+                    @if (result.BufferPercentage > 0)
+                    {
+                        <dt>Buffer reserve</dt>
+                        <dd style="color:var(--amber);">@result.BufferPercentage.ToString("F0")% · −@result.BufferHours.ToString("F1") h</dd>
+                    }
+                </dl>
+                <div class="d-flex gap-2 mt-3 flex-wrap">
+                    <a href="sprint" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-pencil me-1"></i>Edit sprint
+                    </a>
+                    <a href="leave" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-calendar-x me-1"></i>Leave
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized() =>
+        AppState.OnChange += StateHasChanged;
+
+    private async Task ChangeSprint(ChangeEventArgs e)
+    {
+        if (e.Value is string id)
+            await AppState.SetActiveSprintAsync(id);
+    }
+
+    public void Dispose() => AppState.OnChange -= StateHasChanged;
+
+    // Mirror CalendarView's color logic so table avatars match calendar
+    private static readonly string[] Palette =
+    [
+        "#6366f1","#10b981","#f59e0b","#ef4444",
+        "#06b6d4","#a855f7","#ec4899","#0ea5e9"
+    ];
+
+    private static string MemberColor(string memberId)
+    {
+        var h = memberId.Aggregate(0, (acc, c) => acc * 31 + c);
+        return Palette[Math.Abs(h) % Palette.Length];
+    }
+
+    private static string Initials(string name)
+    {
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{parts[0][0]}{parts[^1][0]}".ToUpper()
+            : name[..Math.Min(2, name.Length)].ToUpper();
+    }
+}
