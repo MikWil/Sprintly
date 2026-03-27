@@ -6,6 +6,12 @@ public class WeekCapacity
     public DateOnly End { get; set; }
     public int WorkingDays { get; set; }
 
+    /// <summary>ISO 8601 week number (1–53).</summary>
+    public int WeekNumber { get; set; }
+
+    /// <summary>1-based index of this week within the sprint (Week 1, Week 2 …).</summary>
+    public int SprintWeekIndex { get; set; }
+
     /// <summary>Raw member hours for this week, before buffer deduction.</summary>
     public double HoursGross { get; set; }
 

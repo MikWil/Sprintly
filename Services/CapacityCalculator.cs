@@ -1,3 +1,4 @@
+using System.Globalization;
 using Sprintly.Models;
 
 namespace Sprintly.Services;
@@ -11,20 +12,28 @@ public static class CapacityCalculator
     public static SprintCapacityResult Calculate(
         IEnumerable<TeamMember> members,
         Sprint sprint,
-        IEnumerable<LeaveEntry> leaves)
+        IEnumerable<LeaveEntry> leaves,
+        int workDaysPerWeek = 5)
     {
         var result = new SprintCapacityResult();
         var activeMembers = members.Where(m => m.IsActive).ToList();
         var allLeaves = leaves.ToList();
 
         result.WorkingDaysInSprint = CountWorkingDays(sprint);
+        result.TotalSprintWeeks = workDaysPerWeek > 0
+            ? Math.Round((double)result.WorkingDaysInSprint / workDaysPerWeek, 2)
+            : 0;
+
+        // Effective hours per day: sprint-level override wins over member setting
+        double? sprintHpd = sprint.HoursPerDay;
 
         foreach (var member in activeMembers)
         {
+            var hpd = sprintHpd ?? member.HoursPerDay;
             var memberLeaves = allLeaves.Where(l => l.TeamMemberId == member.Id);
             var leaveDays = CountLeaveDays(member, sprint, memberLeaves);
             var effectiveDays = Math.Max(0, result.WorkingDaysInSprint - leaveDays);
-            var hours = Math.Round(effectiveDays * member.HoursPerDay * member.CapacityFactor, 1);
+            var hours = Math.Round(effectiveDays * hpd * member.CapacityFactor, 1);
 
             result.HoursByPerson[member.Name] = hours;
             result.TotalHours += hours;
@@ -50,8 +59,9 @@ public static class CapacityCalculator
             result.TotalHours = result.TotalHoursGross;
         }
 
-        result.TotalPersonDays = result.WorkingDaysInSprint > 0
-            ? Math.Round(result.TotalHours / 8.0, 1)
+        var effectiveHpd = sprintHpd ?? 8.0;
+        result.TotalPersonDays = effectiveHpd > 0 && result.WorkingDaysInSprint > 0
+            ? Math.Round(result.TotalHours / effectiveHpd, 1)
             : 0;
 
         result.CapacityByWeek = BuildWeeklyBreakdown(activeMembers, sprint, allLeaves, result.BufferPercentage);
@@ -121,6 +131,8 @@ public static class CapacityCalculator
         double bufferPct)
     {
         var weeks = new List<WeekCapacity>();
+        double? sprintHpd = sprint.HoursPerDay;
+        int sprintWeekIndex = 0;
 
         // Walk ISO calendar weeks that intersect the sprint
         var weekStart = sprint.StartDate;
@@ -148,10 +160,11 @@ public static class CapacityCalculator
             double gross = 0;
             foreach (var member in activeMembers)
             {
+                var hpd = sprintHpd ?? member.HoursPerDay;
                 var memberLeaves = allLeaves.Where(l => l.TeamMemberId == member.Id);
                 var leaveDays    = CountLeaveDays(member, sliceSprint, memberLeaves);
                 var effective    = Math.Max(0, workingDays - leaveDays);
-                gross += effective * member.HoursPerDay * member.CapacityFactor;
+                gross += effective * hpd * member.CapacityFactor;
             }
 
             gross = Math.Round(gross, 1);
@@ -164,15 +177,19 @@ public static class CapacityCalculator
             var section     = sprint.Sections.FirstOrDefault(s => s.StartDate <= sectionDay && s.EndDate >= sectionDay)
                            ?? sprint.Sections.FirstOrDefault(s => s.StartDate <= sliceEnd   && s.EndDate >= sliceStart);
 
+            var isoWeek = ISOWeek.GetWeekOfYear(sliceStart.ToDateTime(TimeOnly.MinValue));
+
             weeks.Add(new WeekCapacity
             {
-                Start        = sliceStart,
-                End          = sliceEnd,
-                WorkingDays  = workingDays,
-                HoursGross   = gross,
-                Hours        = net,
-                SectionLabel = section?.Label,
-                SectionColor = section?.Color
+                Start           = sliceStart,
+                End             = sliceEnd,
+                WorkingDays     = workingDays,
+                WeekNumber      = isoWeek,
+                SprintWeekIndex = ++sprintWeekIndex,
+                HoursGross      = gross,
+                Hours           = net,
+                SectionLabel    = section?.Label,
+                SectionColor    = section?.Color
             });
 
             weekStart = weekStart.AddDays(7);

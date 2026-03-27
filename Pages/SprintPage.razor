@@ -37,6 +37,22 @@
             </div>
         </div>
 
+        <div class="row g-3 mt-0">
+            <div class="col-6 col-md-3">
+                <label class="form-label">
+                    Hours / day
+                    <span class="text-muted small fw-normal ms-1">(optional override)</span>
+                </label>
+                <div class="input-group">
+                    <input type="number" class="form-control" @bind="form.HoursPerDayInput"
+                           min="1" max="24" step="0.5"
+                           placeholder="Team default" />
+                    <span class="input-group-text">h</span>
+                </div>
+                <div class="form-text">Overrides each member's individual setting for this sprint.</div>
+            </div>
+        </div>
+
         @if (!string.IsNullOrEmpty(formError))
         {
             <div class="alert alert-danger mt-2 py-2">@formError</div>
@@ -205,6 +221,10 @@ else
                             <div class="small text-muted">
                                 @s.StartDate.ToString("MMM d") – @s.EndDate.ToString("MMM d, yyyy")
                                 &nbsp;·&nbsp; @workingDays working day@(workingDays == 1 ? "" : "s")
+                                @if (s.HoursPerDay.HasValue)
+                                {
+                                    <span> · <i class="bi bi-clock" style="color:var(--brand);"></i> @s.HoursPerDay.Value h/day</span>
+                                }
                                 @if (s.HolidayDates.Count > 0)
                                 {
                                     <span> · @s.HolidayDates.Count red day@(s.HolidayDates.Count == 1 ? "" : "s")</span>
@@ -278,6 +298,7 @@ else
             EndDate = s.EndDate.ToDateTime(TimeOnly.MinValue),
             ExcludeWeekends = s.ExcludeWeekends,
             HolidayDates = [.. s.HolidayDates],
+            HoursPerDayInput = s.HoursPerDay.HasValue ? s.HoursPerDay.Value.ToString() : "",
             Buffers = s.Buffers.Select(b => new SprintBuffer
             {
                 Id = b.Id,
@@ -390,6 +411,7 @@ else
             EndDate = end,
             ExcludeWeekends = form.ExcludeWeekends,
             HolidayDates = [.. form.HolidayDates],
+            HoursPerDay = form.ParsedHoursPerDay,
             Buffers = form.Buffers
                 .Where(b => !string.IsNullOrWhiteSpace(b.Label) && b.Percentage > 0)
                 .Select(b => new SprintBuffer { Id = b.Id, Label = b.Label.Trim(), Percentage = b.Percentage })
@@ -432,6 +454,13 @@ else
         public DateTime EndDate { get; set; } = DateTime.Today.AddDays(13);
         public bool ExcludeWeekends { get; set; } = true;
         public List<DateOnly> HolidayDates { get; set; } = [];
+
+        // Nullable string so empty = "use member default"
+        public string HoursPerDayInput { get; set; } = "";
+
+        public double? ParsedHoursPerDay =>
+            double.TryParse(HoursPerDayInput, out var v) && v > 0 ? v : null;
+
         public List<SprintBuffer> Buffers { get; set; } = [];
         public List<SectionForm> Sections { get; set; } = [];
     }

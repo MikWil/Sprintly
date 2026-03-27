@@ -1,0 +1,157 @@
+@page "/settings"
+@inject AppStateService AppState
+@implements IDisposable
+
+<PageTitle>Settings — Sprintly</PageTitle>
+
+<div class="page-title">
+    <h1>Settings</h1>
+</div>
+
+<div class="form-section" style="max-width:640px;">
+
+    <h2 class="mb-1" style="font-size:1rem; font-weight:700;">Capacity Defaults</h2>
+    <p class="text-muted small mb-3">These values pre-fill new team members and sprints. Changing them does not affect existing data.</p>
+
+    <div class="row g-3">
+        <div class="col-6 col-md-4">
+            <label class="form-label">Default hours / day</label>
+            <div class="input-group">
+                <input type="number" class="form-control" @bind="form.DefaultHoursPerDay"
+                       min="1" max="24" step="0.5" />
+                <span class="input-group-text">h</span>
+            </div>
+            <div class="form-text">Working hours per person per day</div>
+        </div>
+        <div class="col-6 col-md-4">
+            <label class="form-label">Default capacity factor</label>
+            <div class="input-group">
+                <input type="number" class="form-control" @bind="form.DefaultCapacityFactor"
+                       min="0.1" max="1" step="0.05" />
+                <span class="input-group-text">×</span>
+            </div>
+            <div class="form-text">e.g. 0.8 = 80% focus time</div>
+        </div>
+    </div>
+
+    <div class="sp-divider"></div>
+
+    <h2 class="mb-1" style="font-size:1rem; font-weight:700;">Week Definition</h2>
+    <p class="text-muted small mb-3">Controls how sprint length is displayed in "weeks" — matching how your team thinks about iterations.</p>
+
+    <div class="row g-3">
+        <div class="col-6 col-md-4">
+            <label class="form-label">Work days per week</label>
+            <div class="input-group">
+                <input type="number" class="form-control" @bind="form.WorkDaysPerWeek"
+                       min="1" max="7" step="1" />
+                <span class="input-group-text">days</span>
+            </div>
+            <div class="form-text">Typically 5 (Mon–Fri). Used to convert working days → sprint weeks on the dashboard.</div>
+        </div>
+    </div>
+
+    <div class="sp-divider"></div>
+
+    <h2 class="mb-1" style="font-size:1rem; font-weight:700;">Roles</h2>
+    <p class="text-muted small mb-3">These roles appear as suggestions when adding team members.</p>
+
+    <div class="d-flex flex-wrap gap-2 mb-2">
+        @foreach (var role in form.DefaultRoles)
+        {
+            <span class="role-badge d-flex align-items-center gap-1" style="padding:.25rem .6rem;">
+                @role
+                <button type="button" class="btn-close btn-close-sm ms-1"
+                        style="font-size:.55rem; filter:invert(.6);"
+                        @onclick="() => RemoveRole(role)" title="Remove"></button>
+            </span>
+        }
+    </div>
+
+    <div class="d-flex gap-2" style="max-width:300px;">
+        <input @bind="newRole" @bind:event="oninput" @onkeydown="RoleKeyDown"
+               class="form-control form-control-sm" placeholder="Add a role…" />
+        <button class="btn btn-sm btn-outline-secondary" @onclick="AddRole"
+                disabled="@string.IsNullOrWhiteSpace(newRole)">
+            <i class="bi bi-plus-lg"></i>
+        </button>
+    </div>
+
+    <div class="d-flex gap-2 mt-4">
+        <button class="btn btn-primary btn-sm" @onclick="SaveSettings">
+            <i class="bi bi-check-lg me-1"></i>Save settings
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="ResetForm">Reset</button>
+    </div>
+
+    @if (saved)
+    {
+        <div class="alert mt-3 py-2" style="background:var(--green-surface,#052e1633); color:var(--green); border:1px solid var(--green)44; font-size:.85rem;">
+            <i class="bi bi-check-circle-fill me-1"></i>Settings saved.
+        </div>
+    }
+</div>
+
+@code {
+    private SettingsForm form = new();
+    private string newRole = "";
+    private bool saved;
+
+    protected override void OnInitialized()
+    {
+        AppState.OnChange += StateHasChanged;
+        ResetForm();
+    }
+
+    private void ResetForm()
+    {
+        var s = AppState.State.Settings;
+        form = new SettingsForm
+        {
+            DefaultHoursPerDay   = s.DefaultHoursPerDay,
+            DefaultCapacityFactor = s.DefaultCapacityFactor,
+            WorkDaysPerWeek      = s.WorkDaysPerWeek,
+            DefaultRoles         = [..s.DefaultRoles]
+        };
+        saved = false;
+    }
+
+    private void AddRole()
+    {
+        var r = newRole.Trim();
+        if (!string.IsNullOrWhiteSpace(r) && !form.DefaultRoles.Contains(r, StringComparer.OrdinalIgnoreCase))
+            form.DefaultRoles.Add(r);
+        newRole = "";
+    }
+
+    private void RemoveRole(string role) => form.DefaultRoles.Remove(role);
+
+    private void RoleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddRole();
+    }
+
+    private async Task SaveSettings()
+    {
+        var settings = new AppSettings
+        {
+            DefaultHoursPerDay   = form.DefaultHoursPerDay,
+            DefaultCapacityFactor = form.DefaultCapacityFactor,
+            WorkDaysPerWeek      = Math.Max(1, form.WorkDaysPerWeek),
+            DefaultRoles         = [..form.DefaultRoles],
+            Locale               = AppState.State.Settings.Locale
+        };
+        await AppState.SaveSettingsAsync(settings);
+        saved = true;
+    }
+
+    public void Dispose() => AppState.OnChange -= StateHasChanged;
+
+    private class SettingsForm
+    {
+        public double DefaultHoursPerDay   { get; set; } = 8;
+        public double DefaultCapacityFactor { get; set; } = 1.0;
+        public int WorkDaysPerWeek          { get; set; } = 5;
+        public List<string> DefaultRoles    { get; set; } = [];
+    }
+}

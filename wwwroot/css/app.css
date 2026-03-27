@@ -1160,6 +1160,22 @@ main { flex: 1; min-width: 0; }
 }
 
 /* ── Weekly availability share bar ──────────────────────────────── */
+/* ── Week badge (W14, W15…) ─────────────────────────────────── */
+.week-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: .15rem .45rem;
+    border-radius: var(--r-sm);
+    background: var(--brand-glow);
+    color: var(--brand);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .03em;
+    border: 1px solid rgba(99,102,241,.2);
+    white-space: nowrap;
+}
+
 .week-share-bar {
     display: flex;
     align-items: center;

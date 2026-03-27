@@ -58,8 +58,10 @@
 }
 
 @{
-    var leaves = AppState.GetLeaveForSprint(sprint).ToList();
-    var result = CapacityCalculator.Calculate(members, sprint, leaves);
+    var settings   = AppState.State.Settings;
+    var leaves     = AppState.GetLeaveForSprint(sprint).ToList();
+    var result     = CapacityCalculator.Calculate(members, sprint, leaves, settings.WorkDaysPerWeek);
+    var effectiveHpd = sprint.HoursPerDay ?? 8.0;
     var totalLeaveDays = members
         .Where(m => m.IsActive)
         .Sum(m => CapacityCalculator.CountLeaveDays(m, sprint, leaves.Where(l => l.TeamMemberId == m.Id)));
@@ -90,7 +92,7 @@
     <div class="col-6 col-xl">
         <CapacityCard Label="Person-Days"
                       Value="@result.TotalPersonDays.ToString("F1")"
-                      SubText="At 8 h / day"
+                      SubText="@($"At {effectiveHpd:G} h / day")"
                       Icon="person-check-fill" Variant="green" />
     </div>
     <div class="col-6 col-xl">
@@ -100,9 +102,9 @@
                       Icon="people-fill" Variant="purple" />
     </div>
     <div class="col-6 col-xl">
-        <CapacityCard Label="Sprint Days"
-                      Value="@result.WorkingDaysInSprint.ToString()"
-                      SubText="@(redDayCount > 0 ? $"{redDayCount} red day{(redDayCount == 1 ? "" : "s")} excluded" : "No red days")"
+        <CapacityCard Label="Sprint Length"
+                      Value="@($"{result.TotalSprintWeeks:F1} wks")"
+                      SubText="@($"{result.WorkingDaysInSprint} days · {settings.WorkDaysPerWeek} days/wk")"
                       Icon="calendar3" Variant="amber" />
     </div>
     <div class="col-6 col-xl">
@@ -167,12 +169,13 @@
             <thead>
                 <tr>
                     <th style="padding-left:1rem;">Week</th>
+                    <th>Dates</th>
                     <th>Phase</th>
-                    <th style="text-align:right;">Working days</th>
-                    <th style="text-align:right;">@(result.BufferPercentage > 0 ? "Gross hours" : "Hours")</th>
+                    <th style="text-align:right;">Days</th>
+                    <th style="text-align:right;">@(result.BufferPercentage > 0 ? "Gross h" : "Hours")</th>
                     @if (result.BufferPercentage > 0)
                     {
-                        <th style="text-align:right;">Net hours</th>
+                        <th style="text-align:right;">Net h</th>
                     }
                     <th style="text-align:right; padding-right:1rem;">Share</th>
                 </tr>
@@ -184,9 +187,14 @@
                         ? (int)Math.Round(wk.HoursGross / result.TotalHoursGross * 100)
                         : 0;
                     <tr>
-                        <td style="padding-left:1rem; font-variant-numeric:tabular-nums; white-space:nowrap;">
-                            <span style="font-weight:600;">@wk.Start.ToString("MMM d")</span>
-                            <span style="color:var(--text-muted);">–@wk.End.ToString("MMM d")</span>
+                        <td style="padding-left:1rem; white-space:nowrap;">
+                            <div style="display:flex; align-items:center; gap:.4rem;">
+                                <span class="week-badge">W@wk.WeekNumber</span>
+                                <span style="color:var(--text-muted); font-size:.78rem;">Wk @wk.SprintWeekIndex</span>
+                            </div>
+                        </td>
+                        <td style="font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--text-secondary);">
+                            @wk.Start.ToString("MMM d") – @wk.End.ToString("MMM d")
                         </td>
                         <td>
                             @if (wk.SectionLabel != null)
@@ -201,7 +209,7 @@
                                 <span style="color:var(--text-muted); font-size:.8rem;">—</span>
                             }
                         </td>
-                        <td style="text-align:right; color:var(--text-muted);">@wk.WorkingDays</td>
+                        <td style="text-align:right; color:var(--text-muted); font-variant-numeric:tabular-nums;">@wk.WorkingDays</td>
                         <td style="text-align:right; font-variant-numeric:tabular-nums; font-weight:600;">
                             @wk.HoursGross.ToString("F1")
                         </td>
@@ -223,7 +231,7 @@
             </tbody>
             <tfoot>
                 <tr>
-                    <td style="padding-left:1rem; font-weight:700;" colspan="3">Total</td>
+                    <td style="padding-left:1rem; font-weight:700;" colspan="4">Total</td>
                     <td style="text-align:right; font-weight:700; font-variant-numeric:tabular-nums; color:var(--brand-dark);">
                         @result.TotalHoursGross.ToString("F1")
                     </td>
@@ -302,7 +310,7 @@
                                 @h.ToString("F1")
                             </td>
                             <td style="text-align:right; color:var(--text-muted); font-variant-numeric:tabular-nums;">
-                                @((h / 8.0).ToString("F1"))
+                                @((effectiveHpd > 0 ? h / effectiveHpd : 0).ToString("F1"))
                             </td>
                             <td>
                                 <div style="display:flex; align-items:center; gap:.4rem;">
@@ -332,7 +340,7 @@
                             @result.TotalHoursGross.ToString("F1")
                         </td>
                         <td style="text-align:right; color:var(--text-muted); font-variant-numeric:tabular-nums;">
-                            @((result.TotalHoursGross / 8.0).ToString("F1"))
+                            @((effectiveHpd > 0 ? result.TotalHoursGross / effectiveHpd : 0).ToString("F1"))
                         </td>
                         <td></td>
                     </tr>
@@ -346,7 +354,7 @@
                                 −@result.BufferHours.ToString("F1")
                             </td>
                             <td style="text-align:right; font-variant-numeric:tabular-nums; font-size:.85rem; color:var(--text-muted);">
-                                −@((result.BufferHours / 8.0).ToString("F1"))
+                                −@((effectiveHpd > 0 ? result.BufferHours / effectiveHpd : 0).ToString("F1"))
                             </td>
                             <td></td>
                         </tr>
@@ -413,7 +421,12 @@
                     <dt>End</dt>
                     <dd>@sprint.EndDate.ToString("ddd, MMM d yyyy")</dd>
                     <dt>Working days</dt>
-                    <dd>@result.WorkingDaysInSprint</dd>
+                    <dd>@result.WorkingDaysInSprint <span style="color:var(--text-muted); font-size:.8rem;">(@result.TotalSprintWeeks.ToString("F1") wks)</span></dd>
+                    @if (sprint.HoursPerDay.HasValue)
+                    {
+                        <dt>Hours / day</dt>
+                        <dd>@sprint.HoursPerDay.Value h <span style="color:var(--text-muted); font-size:.8rem;">(sprint override)</span></dd>
+                    }
                     <dt>Red days</dt>
                     <dd>
                         @if (sprint.HolidayDates.Count == 0)

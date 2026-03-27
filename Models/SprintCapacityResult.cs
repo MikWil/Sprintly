@@ -11,6 +11,9 @@ public class SprintCapacityResult
     public double TotalPersonDays { get; set; }
     public int WorkingDaysInSprint { get; set; }
 
+    /// <summary>Working days expressed as weeks (WorkingDaysInSprint / workDaysPerWeek).</summary>
+    public double TotalSprintWeeks { get; set; }
+
     /// <summary>Total buffer percentage applied (sum of all SprintBuffer.Percentage).</summary>
     public double BufferPercentage { get; set; }
 
