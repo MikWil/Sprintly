@@ -163,17 +163,18 @@ public class AppStateService(LocalStorageService storage)
     {
         var sprint = new Sprint
         {
-            Id          = "6af5a82d-3c97-417d-81f4-e6080220c85f",
-            Name        = "Sprint 20",
-            StartDate   = new DateOnly(2026, 3, 30),
-            EndDate     = new DateOnly(2026, 4, 19),
+            Id              = "6af5a82d-3c97-417d-81f4-e6080220c85f",
+            Name            = "Sprint 21",
+            StartDate       = new DateOnly(2026, 3, 30),
+            EndDate         = new DateOnly(2026, 4, 19),
             ExcludeWeekends = true,
-            HolidayDates =
+            HolidayDates    =
             [
                 new DateOnly(2026, 4, 2), // Good Friday
                 new DateOnly(2026, 4, 3), // Holy Saturday
                 new DateOnly(2026, 4, 6)  // Easter Monday
             ],
+            HoursPerDay = 8,
             Buffers =
             [
                 new SprintBuffer
@@ -181,6 +182,17 @@ public class AppStateService(LocalStorageService storage)
                     Id         = "62ae786c-ac04-45a4-97fd-59f3f9a2ca5d",
                     Label      = "Bug fixing and meetings",
                     Percentage = 20
+                }
+            ],
+            Sections =
+            [
+                new SprintSection
+                {
+                    Id        = "ce84027c-e095-4824-a15c-8741130ec055",
+                    Label     = "UAT",
+                    StartDate = new DateOnly(2026, 4, 6),
+                    EndDate   = new DateOnly(2026, 4, 19),
+                    Color     = "#f59e0b"
                 }
             ]
         };
@@ -191,11 +203,20 @@ public class AppStateService(LocalStorageService storage)
             new TeamMember { Id = "seed-member-2",                        Name = "Tim",      Role = "Tech Lead", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true },
             new TeamMember { Id = "seed-member-3",                        Name = "Emilie",   Role = "Developer", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true },
             new TeamMember { Id = "seed-member-4",                        Name = "Alex",     Role = "Developer", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true },
-            new TeamMember { Id = "720fa97a-ec85-4eef-9671-5f04eed07de4", Name = "LeeAnn",  Role = "Developer", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true }
+            new TeamMember { Id = "720fa97a-ec85-4eef-9671-5f04eed07de4", Name = "LeeAnn",   Role = "Developer", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true }
         ];
 
         State.Sprints        = [sprint];
         State.ActiveSprintId = sprint.Id;
+
+        State.Settings = new AppSettings
+        {
+            DefaultHoursPerDay    = 8,
+            DefaultCapacityFactor = 1.0,
+            WorkDaysPerWeek       = 5,
+            DefaultRoles          = ["Developer", "QA Engineer", "Designer", "Tech Lead", "Scrum Master", "DevOps"],
+            Locale                = "en-US"
+        };
 
         State.LeaveEntries =
         [
