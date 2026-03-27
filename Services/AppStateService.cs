@@ -161,83 +161,52 @@ public class AppStateService(LocalStorageService storage)
 
     private void LoadSeedData()
     {
-        // Sample sprint: April 1–14 2026
         var sprint = new Sprint
         {
-            Id = "seed-sprint-1",
-            Name = "Sprint 42",
-            StartDate = new DateOnly(2026, 4, 1),
-            EndDate = new DateOnly(2026, 4, 14),
+            Id          = "6af5a82d-3c97-417d-81f4-e6080220c85f",
+            Name        = "Sprint 20",
+            StartDate   = new DateOnly(2026, 3, 30),
+            EndDate     = new DateOnly(2026, 4, 19),
             ExcludeWeekends = true,
-            HolidayDates = [new DateOnly(2026, 4, 6)] // Easter Monday
+            HolidayDates =
+            [
+                new DateOnly(2026, 4, 2), // Good Friday
+                new DateOnly(2026, 4, 3), // Holy Saturday
+                new DateOnly(2026, 4, 6)  // Easter Monday
+            ],
+            Buffers =
+            [
+                new SprintBuffer
+                {
+                    Id         = "62ae786c-ac04-45a4-97fd-59f3f9a2ca5d",
+                    Label      = "Bug fixing and meetings",
+                    Percentage = 20
+                }
+            ]
         };
 
-        var alice = new TeamMember
-        {
-            Id = "seed-member-1",
-            Name = "Alice Chen",
-            Role = "Developer",
-            HoursPerDay = 8,
-            CapacityFactor = 0.8,
-            IsActive = true
-        };
-        var bob = new TeamMember
-        {
-            Id = "seed-member-2",
-            Name = "Bob Smith",
-            Role = "Developer",
-            HoursPerDay = 8,
-            CapacityFactor = 1.0,
-            IsActive = true
-        };
-        var carol = new TeamMember
-        {
-            Id = "seed-member-3",
-            Name = "Carol Johnson",
-            Role = "QA Engineer",
-            HoursPerDay = 8,
-            CapacityFactor = 0.9,
-            IsActive = true
-        };
-        var david = new TeamMember
-        {
-            Id = "seed-member-4",
-            Name = "David Lee",
-            Role = "Tech Lead",
-            HoursPerDay = 8,
-            CapacityFactor = 0.7,
-            IsActive = true
-        };
+        State.TeamMembers =
+        [
+            new TeamMember { Id = "seed-member-1",                        Name = "Justinas", Role = "Developer", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true },
+            new TeamMember { Id = "seed-member-2",                        Name = "Tim",      Role = "Tech Lead", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true },
+            new TeamMember { Id = "seed-member-3",                        Name = "Emilie",   Role = "Developer", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true },
+            new TeamMember { Id = "seed-member-4",                        Name = "Alex",     Role = "Developer", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true },
+            new TeamMember { Id = "720fa97a-ec85-4eef-9671-5f04eed07de4", Name = "LeeAnn",  Role = "Developer", HoursPerDay = 8, CapacityFactor = 1.0, IsActive = true }
+        ];
 
-        State.TeamMembers = [alice, bob, carol, david];
-        State.Sprints = [sprint];
+        State.Sprints        = [sprint];
         State.ActiveSprintId = sprint.Id;
 
-        // Alice takes Apr 1–2 off
         State.LeaveEntries =
         [
-            new LeaveEntry
-            {
-                Id = "seed-leave-1",
-                TeamMemberId = alice.Id,
-                StartDate = new DateOnly(2026, 4, 1),
-                EndDate = new DateOnly(2026, 4, 2),
-                IsPartialDay = false,
-                Type = "Leave",
-                Note = "Family trip"
-            },
-            // Bob takes Apr 8 as a half day
-            new LeaveEntry
-            {
-                Id = "seed-leave-2",
-                TeamMemberId = bob.Id,
-                StartDate = new DateOnly(2026, 4, 8),
-                EndDate = new DateOnly(2026, 4, 8),
-                IsPartialDay = true,
-                Hours = 4,
-                Type = "Leave",
-                Note = "Doctor appointment"
-            }
+            // Justinas: Mar 30 – Apr 5
+            new LeaveEntry { Id = "860422c0-0d36-4a83-92bb-6169085ec1e2", TeamMemberId = "seed-member-1",                        StartDate = new DateOnly(2026, 3, 30), EndDate = new DateOnly(2026, 4, 5),  IsPartialDay = false, Type = "Leave" },
+            // Alex: Apr 13 – Apr 19
+            new LeaveEntry { Id = "fb129289-e45c-4f4e-8902-b63f33ba3f99", TeamMemberId = "seed-member-4",                        StartDate = new DateOnly(2026, 4, 13), EndDate = new DateOnly(2026, 4, 19), IsPartialDay = false, Type = "Leave" },
+            // Emilie: Apr 6 – Apr 7
+            new LeaveEntry { Id = "bcb53cbb-d02d-446f-9e90-721797d83efe", TeamMemberId = "seed-member-3",                        StartDate = new DateOnly(2026, 4, 6),  EndDate = new DateOnly(2026, 4, 7),  IsPartialDay = false, Type = "Leave" },
+            // LeeAnn: Apr 6 – Apr 7
+            new LeaveEntry { Id = "26cbe5ea-5a14-4e00-8247-c5d05d1f9c76", TeamMemberId = "720fa97a-ec85-4eef-9671-5f04eed07de4", StartDate = new DateOnly(2026, 4, 6),  EndDate = new DateOnly(2026, 4, 7),  IsPartialDay = false, Type = "Leave" }
         ];
     }
 }
