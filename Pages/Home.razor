@@ -101,10 +101,15 @@
                       SubText="@(members.Count(m => !m.IsActive) > 0 ? $"{members.Count(m => !m.IsActive)} inactive" : "All active")"
                       Icon="people-fill" Variant="purple" />
     </div>
+    @{
+        var personWeeks = settings.WorkDaysPerWeek > 0
+            ? result.TotalPersonDays / settings.WorkDaysPerWeek
+            : 0;
+    }
     <div class="col-6 col-xl">
         <CapacityCard Label="Sprint Length"
-                      Value="@($"{result.TotalSprintWeeks:F1} wks")"
-                      SubText="@($"{result.WorkingDaysInSprint} days · {settings.WorkDaysPerWeek} days/wk")"
+                      Value="@($"{personWeeks:F1} wks")"
+                      SubText="@($"{result.TotalHours:F1} h · {result.WorkingDaysInSprint} days")"
                       Icon="calendar3" Variant="amber" />
     </div>
     <div class="col-6 col-xl">
