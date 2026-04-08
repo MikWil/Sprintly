@@ -66,6 +66,30 @@
         .Where(m => m.IsActive)
         .Sum(m => CapacityCalculator.CountLeaveDays(m, sprint, leaves.Where(l => l.TeamMemberId == m.Id)));
     var redDayCount = sprint.HolidayDates.Count;
+
+    // Remaining sprint (today → end) using the same working-day/leave/buffer rules as full-sprint capacity.
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var remainingStart = today < sprint.StartDate ? sprint.StartDate : today;
+    SprintCapacityResult? remainingResult = null;
+    var remainingWorkingDays = 0;
+    if (remainingStart <= sprint.EndDate)
+    {
+        var remainingSprint = new Sprint
+        {
+            Id              = sprint.Id,
+            Name            = sprint.Name,
+            StartDate       = remainingStart,
+            EndDate         = sprint.EndDate,
+            ExcludeWeekends = sprint.ExcludeWeekends,
+            HolidayDates    = sprint.HolidayDates.Where(d => d >= remainingStart && d <= sprint.EndDate).ToList(),
+            HoursPerDay     = sprint.HoursPerDay,
+            Buffers         = sprint.Buffers,
+            Sections        = sprint.Sections
+        };
+
+        remainingWorkingDays = CapacityCalculator.CountWorkingDays(remainingSprint);
+        remainingResult = CapacityCalculator.Calculate(members, remainingSprint, leaves, settings.WorkDaysPerWeek);
+    }
 }
 
 @* ── Warnings ─────────────────────────────────────────────────────── *@
@@ -88,6 +112,14 @@
                       Value="@result.TotalHours.ToString("F1")"
                       SubText="@(result.BufferPercentage > 0 ? $"{result.TotalHoursGross:F1} h raw · {result.BufferPercentage:F0}% buffered" : $"{result.WorkingDaysInSprint} working days")"
                       Icon="clock-history" Variant="blue" />
+    </div>
+    <div class="col-6 col-xl">
+        <CapacityCard Label="Remaining Hours"
+                      Value="@(remainingResult?.TotalHours.ToString("F1") ?? "0.0")"
+                      SubText="@(remainingResult == null
+                          ? (today > sprint.EndDate ? "Sprint ended" : $"Starts {sprint.StartDate:MMM d}")
+                          : $"{remainingWorkingDays} working day{(remainingWorkingDays == 1 ? "" : "s")} left · ends {sprint.EndDate:MMM d}")"
+                      Icon="hourglass-split" Variant="green" />
     </div>
     <div class="col-6 col-xl">
         <CapacityCard Label="Person-Days"
@@ -425,6 +457,24 @@
                     <dd>@sprint.StartDate.ToString("ddd, MMM d yyyy")</dd>
                     <dt>End</dt>
                     <dd>@sprint.EndDate.ToString("ddd, MMM d yyyy")</dd>
+                    <dt>Remaining</dt>
+                    <dd>
+                        @if (remainingResult == null)
+                        {
+                            <span style="color:var(--text-muted);">
+                                @(today > sprint.EndDate ? "Sprint ended" : "Not started")
+                            </span>
+                        }
+                        else
+                        {
+                            <span style="font-variant-numeric:tabular-nums; font-weight:700; color:var(--brand);">
+                                @remainingResult.TotalHours.ToString("F1") h
+                            </span>
+                            <span style="color:var(--text-muted); font-size:.8rem;">
+                                · @remainingWorkingDays day@(remainingWorkingDays == 1 ? "" : "s") left
+                            </span>
+                        }
+                    </dd>
                     <dt>Working days</dt>
                     <dd>@result.WorkingDaysInSprint <span style="color:var(--text-muted); font-size:.8rem;">(@result.TotalSprintWeeks.ToString("F1") wks)</span></dd>
                     @if (sprint.HoursPerDay.HasValue)
